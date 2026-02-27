@@ -1,3 +1,17 @@
+terraform {
+  required_providers {
+    docker = {
+      source  = "kreuzwerker/docker"
+      version = "~> 3.0.0"
+    }
+  }
+}
+
+provider "docker" {
+  # Este bloque le dice a Terraform que se conecte al Docker Desktop 
+  # o servicio de Docker que tienes corriendo en tu máquina.
+}
+
 # 1. Red de microservicios
 resource "docker_network" "app_network" {
   name = "app_network_internal"
