@@ -2,14 +2,16 @@ terraform {
   required_providers {
     docker = {
       source  = "kreuzwerker/docker"
-      version = "~> 3.0.0"
+      version = "~> 3.1.0"
     }
   }
 }
 
 provider "docker" {
-  # Este bloque le dice a Terraform que se conecte al Docker Desktop 
-  # o servicio de Docker que tienes corriendo en tu máquina.
+  host = "unix:///var/run/docker.sock"
+  #registry_auth {
+  #    address = "registry-1.docker.io"
+  #}
 }
 
 # 1. Red de microservicios
