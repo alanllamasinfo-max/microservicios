@@ -1,0 +1,24 @@
+--creacion de las bases de datos 
+bash deploy.sh
+
+  --tras la creacion de las 
+curl http://localhost:8001/health
+
+--ver los logs de la api para ver si conectan bien
+docker logs api_gateway_service
+
+docker restart api_gateway_service
+
+--no tengo muy claro que hace estecomnado
+docker build -t user-service:latest ./proyecto-multidb/user-service
+
+--insercion de datos
+curl -X POST "http://localhost:8001/sync-data?user_id=1&user_name=JuanPerez&item_name=Laptop"
+
+--si las tablas no se cran automaticamente
+docker exec -it db_postgres_inventory psql -Uadmin_pg -d inventory_db -c "CREATE TABLE IF NOT EXISTS inventory (id SERIAL PRIMARY KEY, item_name VARCHAR(100), user_id INT);"
+docker exec -it db_mysql_users mysql -uuser_admin -p123 -e "CREATE DATABASE IF NOT EXISTS users_db; CREATE TABLE IF NOT EXISTS users_db.users (id INT PRIMARY KEY, name VARCHAR(100));"
+
+--resultado de query para comprobar los inserts
+docker exec -it db_mysql_users mysql -uuser_admin -p123 -e "SELECT * FROM users_db.users;"
+docker exec -it db_postgres_inventory psql -Uadmin_pg -d inventory_db -c "SELECT * FROM inventory;
