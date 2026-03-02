@@ -3,3 +3,5 @@ uvicorn
 sqlalchemy
 pymysql
 psycopg2-binary
+elasticsearch
+cryptography
