@@ -11,3 +11,4 @@ echo "deb https://packages.cloud.google.com/apt $GCSFUSE_REPO main" | sudo tee /
 curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key add -
 sudo apt-get update
 sudo apt-get install -y gcsfuse
+sudo apt-get install -y docker-compose
