@@ -1,71 +1,62 @@
 #!/bin/bash
-
-# Cargar variables de entorno
 set -a
 source .env
 set +a
 
-# Configuración
 NETWORK_NAME="app_network_internal"
-IMAGE_NAME="user-service:latest"
-IMAGE_DIR="./user-service"
+INIT_SCRIPTS_PATH="/home/humic/bucket-archivos/proyecto-multidb/init-scripts"
+SCRIPTS_TEMP_PATH="/tmp/processed-scripts"
 
-# Variables (equivalentes a secretos.tfvars y variables.tf)
-DB_PASSWORD="123"
-PG_PASSWORD="456"
-DB_NAME="users_db"
-DB_USER="user_admin"
-PG_USER="admin_pg"
-PG_DB_NAME="inventory_db"
+# Crear directorio temporal para scripts procesados
+mkdir -p $SCRIPTS_TEMP_PATH
 
-echo "--- Iniciando despliegue de Docker puro ---"
+# 1. Crear Red
+docker network create $NETWORK_NAME || true
 
-# 1. Crear la red
-if [ ! "$(docker network ls | grep $NETWORK_NAME)" ]; then
-  echo "Creando red: $NETWORK_NAME"
-  docker network create $NETWORK_NAME
-else
-  echo "La red $NETWORK_NAME ya existe."
-fi
+# --- PROCESAR SCRIPTS SQL CON SED ---
+# Procesar MySQL
+sed -e "s/\${MYSQL_USER}/$MYSQL_USER/g" \
+    -e "s/\${MYSQL_PASSWORD}/$MYSQL_PASSWORD/g" \
+    $INIT_SCRIPTS_PATH/01-mysql.sql > $SCRIPTS_TEMP_PATH/01-mysql.sql
 
-# 2. Levantar MySQL
-echo "Levantando contenedor MySQL..."
+# Procesar Postgres
+sed -e "s/\${POSTGRES_APP_USER}/$POSTGRES_APP_USER/g" \
+    -e "s/\${POSTGRES_APP_PASSWORD}/$POSTGRES_APP_PASSWORD/g" \
+    $INIT_SCRIPTS_PATH/02-postgres.sql > $SCRIPTS_TEMP_PATH/02-postgres.sql
+
+# 2. Levantar MySQL (Montando script procesado)
 docker run -d \
   --name db_mysql_users \
   --network $NETWORK_NAME \
-  -e MYSQL_ROOT_PASSWORD=$DB_PASSWORD \
-  -e MYSQL_DATABASE=$DB_NAME \
-  -e MYSQL_USER=$DB_USER \
-  -e MYSQL_PASSWORD=$DB_PASSWORD \
+  -e MYSQL_ROOT_PASSWORD=$MYSQL_ROOT_PASSWORD \
+  -v $SCRIPTS_TEMP_PATH/01-mysql.sql:/docker-entrypoint-initdb.d/01-mysql.sql \
   mysql:8.0 --default-authentication-plugin=mysql_native_password
 
-# 3. Levantar PostgreSQL
-echo "Levantando contenedor PostgreSQL..."
+# 3. Levantar Postgres (Montando script procesado)
 docker run -d \
   --name db_postgres_inventory \
   --network $NETWORK_NAME \
-  -e POSTGRES_USER=$PG_USER \
-  -e POSTGRES_PASSWORD=$PG_PASSWORD \
-  -e POSTGRES_DB=$PG_DB_NAME \
+  -e POSTGRES_USER=$POSTGRES_USER \
+  -e POSTGRES_PASSWORD=$POSTGRES_PASSWORD \
+  -e POSTGRES_DB=$POSTGRES_DB \
+  -v $SCRIPTS_TEMP_PATH/02-postgres.sql:/docker-entrypoint-initdb.d/02-postgres.sql \
   postgres:15-alpine
 
-# 4. Construir la imagen de la API
-echo "Construyendo imagen de la API..."
-docker build -t $IMAGE_NAME $IMAGE_DIR
-
-# 5. Esperar a que las BDs inicien
-echo "Esperando 20 segundos a que las bases de datos inicien..."
+# Esperar a que las BDs inicien
+echo "Esperando a que las bases de datos inicialicen..."
 sleep 20
 
-# 6. Levantar el servicio Python
-echo "Levantando contenedor Python API..."
+# 4. Levantar la API
+docker build -t user-service:latest ./user-service
 docker run -d \
   --name api_gateway_service \
   --network $NETWORK_NAME \
   -p 8001:8001 \
-  -e MYSQL_URL="mysql+pymysql://$DB_USER:$DB_PASSWORD@db_mysql_users:3306/$DB_NAME" \
-  -e POSTGRES_URL="postgresql://$PG_USER:$PG_PASSWORD@db_postgres_inventory:5432/$PG_DB_NAME" \
-  $IMAGE_NAME
+  -e MYSQL_URL="mysql+pymysql://$MYSQL_USER:$MYSQL_PASSWORD@db_mysql_users:3306/$MYSQL_DATABASE" \
+  -e POSTGRES_URL="postgresql://$POSTGRES_APP_USER:$POSTGRES_APP_PASSWORD@db_postgres_inventory:5432/$POSTGRES_DB" \
+  user-service:latest
 
 echo "--- Despliegue completado ---"
 docker ps
+
+#curl http://localhost:8001/health
