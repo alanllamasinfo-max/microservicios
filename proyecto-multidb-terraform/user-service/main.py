@@ -1,23 +1,13 @@
 import os
+import time
 from fastapi import FastAPI, HTTPException
 from sqlalchemy import create_engine, Column, Integer, String
 from sqlalchemy.orm import sessionmaker, declarative_base
 
-# 1. Leemos las URLs inyectadas
-MYSQL_URL = os.getenv("MYSQL_URL")
-POSTGRES_URL = os.getenv("POSTGRES_URL")
-
-# 2. Creamos los motores
-engine_mysql = create_engine(MYSQL_URL)
-engine_pg = create_engine(POSTGRES_URL)
-
-SessionMySQL = sessionmaker(bind=engine_mysql)
-SessionPG = sessionmaker(bind=engine_pg)
-
-# Base para los modelos
+# 1. Definir la base ANTES de usarla
 Base = declarative_base()
 
-# --- Definición de Modelos ---
+# --- Definición de Modelos (DEFINIRLOS ANTES DE CREATE_ALL) ---
 class User(Base):
     __tablename__ = 'users'
     id = Column(Integer, primary_key=True)
@@ -29,10 +19,38 @@ class Inventory(Base):
     item_name = Column(String(100))
     user_id = Column(Integer) # Referencia lógica a MySQL
 
-# Crear tablas si no existen
-Base.metadata.create_all(engine_mysql)
+# 2. Leemos las URLs inyectadas
+MYSQL_URL = os.getenv("MYSQL_URL")
+POSTGRES_URL = os.getenv("POSTGRES_URL")
+
+# 3. Creamos los motores
+engine_mysql = create_engine(MYSQL_URL)
+engine_pg = create_engine(POSTGRES_URL)
+
+SessionMySQL = sessionmaker(bind=engine_mysql)
+SessionPG = sessionmaker(bind=engine_pg)
+
+# 4. Lógica de reintento para MySQL
+MAX_RETRIES = 5
+RETRY_DELAY = 5 # segundos
+
+for i in range(MAX_RETRIES):
+    try:
+        print(f"Intentando conectar a MySQL (Intento {i+1}/{MAX_RETRIES})...")
+        # create_all usa los modelos definidos en Base
+        Base.metadata.create_all(engine_mysql)
+        print("Tablas de MySQL creadas o verificadas exitosamente.")
+        break
+    except Exception as e:
+        print(f"No se pudo conectar a MySQL: {e}")
+        if i == MAX_RETRIES - 1:
+            raise Exception("No se pudo conectar a MySQL después de varios intentos.")
+        time.sleep(RETRY_DELAY)
+
+# 5. Crear tablas en Postgres (Ya está listo al iniciar Postgres)
 Base.metadata.create_all(engine_pg)
 
+# 6. Inicializar FastAPI
 app = FastAPI()
 
 @app.get("/health")
